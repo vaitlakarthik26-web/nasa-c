@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#05050B" />
+  <title>ABANDONED BUT NOT FORGOTTEN | NASA Exploration Archive</title>
+  <meta name="description" content="An interactive 3D exploration of human-made equipment left on the Moon and Mars." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        space: { 950:'#05050B', 900:'#0A0E17', 800:'#111827', 700:'#1F2937' },
+        nasa: { cyan:'#00E5FF', orange:'#FF9F1C' }
+      }}}
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; --cyan:#00E5FF; --amber:#FF9F1C; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; width:100%; min-height:100%; background:#05050B; color:#FDFDFD; font-family:Inter,system-ui,sans-serif; }
+    body { overflow:hidden; }
+    #scene { position:fixed; inset:0; z-index:0; }
+    canvas { display:block; }
+    .mono { font-family:"JetBrains Mono",monospace; }
+    .glass { background:rgba(10,14,23,.68); border:1px solid rgba(255,255,255,.13); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+    .glow { text-shadow:0 0 8px rgba(0,229,255,.4); }
+    .cyan { color:var(--cyan); }
+    .amber { color:var(--amber); }
+    .screen { position:fixed; inset:0; z-index:10; pointer-events:none; }
+    .screen button,.screen a,.screen input { pointer-events:auto; }
+    .panel { border:1px solid rgba(255,255,255,.12); background:rgba(5,8,15,.78); backdrop-filter:blur(16px); }
+    .navbtn { padding:.55rem .8rem; border-radius:.65rem; color:#aab4c4; font:600 11px "JetBrains Mono",monospace; letter-spacing:.04em; }
+    .navbtn.active,.navbtn:hover { color:white; background:rgba(255,255,255,.12); }
+    .pill { border:1px solid rgba(255,255,255,.15); border-radius:999px; padding:.25rem .6rem; font:10px "JetBrains Mono",monospace; }
+    .action { border:1px solid rgba(0,229,255,.45); background:rgba(0,229,255,.1); color:#dffcff; border-radius:.7rem; padding:.65rem .9rem; font:700 11px "JetBrains Mono",monospace; }
+    .action:hover { background:rgba(0,229,255,.2); }
+    .hidden { display:none !important; }
+    #reticle { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:22px;height:22px;border:1px solid rgba(0,229,255,.65);border-radius:50%; box-shadow:0 0 12px rgba(0,229,255,.25); }
+    #reticle:before,#reticle:after { content:"";position:absolute;background:var(--cyan);opacity:.7; }
+    #reticle:before { width:1px;height:34px;left:10px;top:-7px; }
+    #reticle:after { height:1px;width:34px;top:10px;left:-7px; }
+    #modal { z-index:30; }
+    #toast { transition:opacity .25s; }
+    .bar { height:4px;background:#253244;border-radius:9px;overflow:hidden; }
+    .bar > i { display:block;height:100%;background:var(--cyan);width:100%; }
+    @media(max-width:760px) {
+      .desktop-only { display:none !important; }
+      #leftHud { top:auto;bottom:84px;left:10px;width:170px; }
+      #rightHud { top:72px;right:10px;width:150px; }
+      #topbar { padding:10px; }
+      #brandSub { display:none; }
+      #bottomHelp { bottom:12px; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="scene"></div>
+  <div class="screen">
+    <header id="topbar" class="absolute top-0 inset-x-0 flex items-center justify-between gap-3 p-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl border border-cyan-300/40 bg-cyan-300/10 grid place-items-center cyan text-xl">✦</div>
+        <div><div class="font-extrabold tracking-[.13em] text-sm">ABANDONED <span class="cyan">&</span> NOT FORGOTTEN</div><div id="brandSub" class="mono text-[9px] tracking-[.2em] text-slate-400 mt-1">A HUMAN FOOTPRINTS ARCHIVE // 3D FIELD EXPERIENCE</div></div>
+      </div>
+      <nav class="glass rounded-xl p-1 flex flex-wrap gap-1">
+        <a class="navbtn" href="index.html#home">HOME</a>
+        <a class="navbtn" href="index.html#planets">PLANETS</a>
+        <a class="navbtn" href="index.html#equipment">EQUIPMENT</a>
+        <button class="navbtn active" data-page="explore">3D EVA</button>
+        <a class="navbtn" href="index.html#timeline">TIMELINE</a>
+      </nav>
+      <div class="flex gap-2">
+        <button id="qualityBtn" class="pill text-slate-300">GRAPHICS: HIGH</button>
+        <button id="helpBtn" class="pill cyan">HELP ?</button>
+      </div>
+    </header>
+
+    <div id="exploreHud">
+      <section id="leftHud" class="absolute left-4 top-24 w-56 glass rounded-2xl p-4">
+        <div class="flex justify-between items-center"><span class="mono text-[9px] tracking-widest text-slate-400">MISSION CONTROL</span><span class="w-2 h-2 rounded-full bg-emerald-400"></span></div>
+        <div id="siteTitle" class="font-bold mt-2 text-lg">LUNAR SURFACE</div>
+        <div id="siteSubtitle" class="mono text-[9px] text-slate-400 mt-1">MARE TRANQUILLITATIS // SIMULATED SITE</div>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          <button id="moonBtn" class="action">MOON</button>
+          <button id="marsBtn" class="pill amber">MARS</button>
+        </div>
+        <div class="border-t border-white/10 mt-4 pt-3">
+          <div class="flex justify-between mono text-[9px] text-slate-400"><span>MISSION ELAPSED</span><span id="met">00:00:00</span></div>
+          <div class="flex justify-between mono text-[9px] text-slate-400 mt-3"><span>LOCAL GRAVITY</span><span id="gravity" class="text-white">1.62 m/s²</span></div>
+          <div class="flex justify-between mono text-[9px] text-slate-400 mt-2"><span>HEADING</span><span id="heading" class="text-white">000° N</span></div>
+          <div class="flex justify-between mono text-[9px] text-slate-400 mt-2"><span>POSITION</span><span id="coords" class="text-white">X 0 / Z 0</span></div>
+        </div>
+      </section>
+
+      <section id="rightHud" class="absolute right-4 top-24 w-56 glass rounded-2xl p-4">
+        <div class="mono text-[9px] tracking-widest text-slate-400">FIELD OBJECTIVES</div>
+        <div class="flex justify-between mt-2"><span class="text-xs text-slate-300">Artifacts inspected</span><b id="count" class="cyan mono text-xs">0 / 4</b></div>
+        <div class="bar mt-2"><i id="progress" style="width:0%"></i></div>
+        <div id="waypoints" class="mt-3 space-y-2"></div>
+        <p class="mono text-[9px] text-slate-500 mt-4 leading-relaxed">APPROACH AN OBJECT AND PRESS E OR CLICK IT TO OPEN ITS FIELD DOSSIER.</p>
+      </section>
+      <div id="reticle"></div>
+      <div id="prompt" class="absolute left-1/2 bottom-24 -translate-x-1/2 glass rounded-xl px-4 py-3 text-center opacity-0 transition-opacity">
+        <div class="mono text-[9px] cyan tracking-widest">OBJECT IN RANGE</div><div id="promptName" class="font-bold text-sm mt-1">Artifact</div><div class="mono text-[9px] text-slate-400 mt-1">PRESS E / CLICK TO INSPECT</div>
+      </div>
+      <div id="touchControls" class="hidden md:hidden absolute bottom-20 right-3 grid grid-cols-3 gap-1 pointer-events-auto">
+        <span></span><button class="action touch-key" data-key="KeyW">▲</button><span></span>
+        <button class="action touch-key" data-key="KeyA">◀</button><button class="action touch-key" data-key="KeyS">▼</button><button class="action touch-key" data-key="KeyD">▶</button>
+        <button class="action col-span-3" id="touchInspect">INSPECT · E</button>
+      </div>
+      <div id="bottomHelp" class="absolute bottom-5 left-1/2 -translate-x-1/2 glass rounded-full px-4 py-2 mono text-[9px] text-slate-400 whitespace-nowrap">
+        <span class="text-white">W A S D</span> MOVE &nbsp;·&nbsp; <span class="text-white">MOUSE</span> LOOK &nbsp;·&nbsp; <span class="text-white">E</span> INSPECT &nbsp;·&nbsp; <span class="text-white">SHIFT</span> WALK FASTER
+      </div>
+    </div>
+
+    <main id="pagePanel" class="hidden absolute inset-x-0 top-24 bottom-6 mx-auto max-w-5xl overflow-auto panel rounded-3xl p-6 md:p-10 pointer-events-auto">
+      <div id="archivePage" class="hidden">
+        <div class="mono cyan text-[10px] tracking-[.25em]">MISSION RECORDS // 01</div>
+        <h1 class="text-3xl md:text-5xl font-extrabold mt-3">The objects we left behind.</h1>
+        <p class="text-slate-400 mt-3 max-w-2xl">Explore hardware and mission remnants that remain on other worlds. This educational experience combines documented mission history with clearly labelled 3D reconstructions.</p>
+        <div id="archiveCards" class="grid md:grid-cols-2 gap-4 mt-8"></div>
+      </div>
+      <div id="aboutPage" class="hidden">
+        <div class="mono cyan text-[10px] tracking-[.25em]">THE PROJECT // 02</div>
+        <h1 class="text-3xl md:text-5xl font-extrabold mt-3">Abandoned, not forgotten.</h1>
+        <p class="text-slate-300 leading-7 mt-5 max-w-3xl">Human exploration leaves a physical record. From lunar experiment packages to Mars landing-system components, equipment remains where missions placed or released it. This interactive museum invites visitors to explore those traces and learn why they matter.</p>
+        <div class="grid md:grid-cols-3 gap-3 mt-8">
+          <div class="glass rounded-2xl p-4"><div class="cyan mono text-xs">01 / DISCOVER</div><h3 class="font-bold mt-2">Explore the surface</h3><p class="text-xs text-slate-400 mt-2">Walk through a stylized reconstruction of a lunar or Martian field site.</p></div>
+          <div class="glass rounded-2xl p-4"><div class="cyan mono text-xs">02 / INSPECT</div><h3 class="font-bold mt-2">Open field dossiers</h3><p class="text-xs text-slate-400 mt-2">Read concise mission context, purpose, and why hardware remains.</p></div>
+          <div class="glass rounded-2xl p-4"><div class="cyan mono text-xs">03 / LEARN</div><h3 class="font-bold mt-2">Separate fact from model</h3><p class="text-xs text-slate-400 mt-2">3D assets and telemetry are educational simulations, not live NASA data.</p></div>
+        </div>
+        <p class="mono text-[10px] text-slate-500 mt-8">UNOFFICIAL EDUCATIONAL PROJECT. NOT AFFILIATED WITH OR ENDORSED BY NASA.</p>
+      </div>
+    </main>
+  </div>
+
+  <div id="modal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm items-center justify-center p-4">
+    <div class="panel rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-auto p-6 md:p-8 relative">
+      <button id="closeModal" class="absolute top-4 right-4 pill">CLOSE ✕</button>
+      <div id="modalType" class="mono cyan text-[10px] tracking-[.2em]">FIELD DOSSIER</div>
+      <div id="modalYear" class="mono text-[10px] text-slate-500 mt-2"></div>
+      <h2 id="modalTitle" class="text-2xl md:text-3xl font-extrabold mt-3 pr-16"></h2>
+      <div class="h-px bg-white/10 my-5"></div>
+      <div class="grid md:grid-cols-2 gap-5">
+        <div><div class="mono text-[9px] amber tracking-widest">MISSION PURPOSE</div><p id="modalPurpose" class="text-sm text-slate-300 leading-6 mt-2"></p></div>
+        <div><div class="mono text-[9px] amber tracking-widest">WHY IT REMAINS</div><p id="modalWhy" class="text-sm text-slate-300 leading-6 mt-2"></p></div>
+      </div>
+      <div class="glass rounded-xl p-4 mt-5"><div class="mono text-[9px] cyan">HISTORICAL CONTEXT</div><p id="modalHistory" class="text-sm text-slate-300 leading-6 mt-2"></p></div>
+      <div class="flex flex-wrap items-center justify-between gap-3 mt-5">
+        <span id="modelNote" class="mono text-[9px] text-slate-500">3D MODEL: EDUCATIONAL RECONSTRUCTION</span>
+        <a id="sourceLink" class="action" href="#" target="_blank" rel="noopener noreferrer">NASA / SOURCE ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="helpModal" class="hidden fixed inset-0 z-40 bg-black/70 items-center justify-center p-4">
+    <div class="panel rounded-2xl p-6 max-w-md w-full">
+      <div class="flex justify-between"><h2 class="font-bold text-xl">EXPLORATION CONTROLS</h2><button id="closeHelp" class="pill">✕</button></div>
+      <div class="space-y-3 mt-5 text-sm text-slate-300">
+        <p><b class="cyan">W A S D / Arrow keys</b> — Move across the surface.</p>
+        <p><b class="cyan">Mouse drag</b> — Look around.</p>
+        <p><b class="cyan">E</b> — Inspect the nearest object.</p>
+        <p><b class="cyan">Click an object</b> — Open its dossier.</p>
+        <p><b class="cyan">Shift</b> — Move faster.</p>
+      </div>
+      <p class="mono text-[9px] text-slate-500 mt-5">TIP: USE A DESKTOP BROWSER FOR THE BEST EXPERIENCE.</p>
+    </div>
+  </div>
+  <div id="toast" class="fixed z-50 bottom-5 left-1/2 -translate-x-1/2 panel rounded-xl px-4 py-2 mono text-[10px] text-slate-300 opacity-0 pointer-events-none">Loading simulation…</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+const DATA = {
+  moon: [
+    {id:'lm',name:'Apollo Lunar Module Descent Stage',mission:'Apollo 11',year:'1969',type:'LUNAR LANDING HARDWARE',purpose:'The descent stage carried the Apollo Lunar Module from lunar orbit to the surface and provided the landing engine, landing legs, and equipment bays.',why:'The ascent stage returned the astronauts to lunar orbit. The descent stage was left on the Moon as part of the mission architecture.',history:'Apollo 11 landed in the Sea of Tranquility in July 1969. The descent stage remained at the landing site after the crew departed. This scene is a simplified educational reconstruction.',url:'https://www.nasa.gov/mission/apollo-11/',position:[-8,0,-13],color:0xc7c9c5},
+    {id:'rover',name:'Lunar Roving Vehicle',mission:'Apollo 15 / 16 / 17',year:'1971–1972',type:'CREWED SURFACE MOBILITY',purpose:'The battery-powered rover extended astronaut range and carried tools, cameras, and scientific equipment during later Apollo lunar excursions.',why:'The rover was not designed to return to Earth. Leaving it behind reduced the mass that had to be lifted from the lunar surface.',history:'Three Lunar Roving Vehicles were used on Apollo 15, 16, and 17. The vehicles remain at their respective landing sites.',url:'https://www.nasa.gov/mission/apollo-15/',position:[9,0,-8],color:0xb7b9b2},
+    {id:'alsep',name:'Apollo Lunar Surface Experiments Package',mission:'Apollo scientific stations',year:'1969–1972',type:'LUNAR SCIENCE INSTRUMENTS',purpose:'ALSEP stations carried instruments that measured lunar conditions, including seismic activity and properties of the local environment.',why:'The instruments were deployed to operate remotely after the astronauts left. Several stations transmitted data for years before shutdown.',history:'Apollo crews deployed scientific packages at multiple landing sites. Individual instruments and layouts varied by mission.',url:'https://science.nasa.gov/moon/',position:[-15,0,7],color:0xd2b96d},
+    {id:'retro',name:'Laser Ranging Retroreflector',mission:'Apollo 11 / 14 / 15',year:'1969–1971',type:'PASSIVE SCIENCE EXPERIMENT',purpose:'Arrays of corner-cube reflectors allow observatories on Earth to measure the Earth–Moon distance by timing laser pulses reflected from the lunar surface.',why:'The device is passive and requires no power, so it can continue supporting measurements long after deployment.',history:'Apollo astronauts deployed retroreflector arrays. Lunar laser ranging remains an important long-term experiment.',url:'https://science.nasa.gov/moon/',position:[15,0,12],color:0x8ba9b5}
+  ],
+  mars: [
+    {id:'parachute',name:'Mars Entry Parachute',mission:'Mars 2020 / Perseverance',year:'2021',type:'ENTRY, DESCENT AND LANDING',purpose:'A supersonic parachute helped slow the Perseverance rover during its descent through the Martian atmosphere.',why:'The parachute was released during landing and was not designed to be recovered or reused.',history:'Perseverance landed in Jezero Crater on 18 February 2021. The parachute and other landing-system components were released during the landing sequence.',url:'https://mars.nasa.gov/mars2020/',position:[-12,0,-12],color:0xc6b5a0},
+    {id:'backshell',name:'Backshell and Parachute Cover',mission:'Mars 2020 / Perseverance',year:'2021',type:'AEROSHELL COMPONENT',purpose:'The backshell protected the rover during atmospheric entry and carried the parachute system before it was deployed.',why:'After its protective role was complete, the backshell separated from the descent system and fell to the surface.',history:'The Mars 2020 landing system used a heat shield, backshell, parachute, and powered descent stage to deliver the rover safely.',url:'https://mars.nasa.gov/mars2020/timeline/landing/',position:[11,0,-14],color:0x9c7d62},
+    {id:'heatshield',name:'Heat Shield',mission:'Mars 2020 / Perseverance',year:'2021',type:'THERMAL PROTECTION',purpose:'The heat shield protected the spacecraft from intense heating as it entered the Martian atmosphere at high speed.',why:'It was discarded after the spacecraft slowed sufficiently and before the final powered descent.',history:'The heat shield is one of several components released during the Mars 2020 entry, descent, and landing sequence.',url:'https://mars.nasa.gov/mars2020/',position:[-17,0,9],color:0x8e6046},
+    {id:'descent',name:'Sky Crane Descent Stage',mission:'Mars 2020 / Perseverance',year:'2021',type:'POWERED LANDING SYSTEM',purpose:'The rocket-powered sky crane lowered Perseverance on cables during the final stage of landing.',why:'After lowering the rover, the descent stage flew away and impacted the surface at a safe distance.',history:'NASA’s sky-crane landing architecture was also used for Curiosity. The Mars 2020 system delivered Perseverance to Jezero Crater.',url:'https://mars.nasa.gov/mars2020/timeline/landing/',position:[16,0,8],color:0xb6a58c}
+  ]
+};
+
+const $ = id => document.getElementById(id);
+let scene,camera,renderer,clock,terrain,starField,dust,objects=[],raycaster,mouse;
+let env='moon', yaw=0, pitch=-.08, dragging=false, lastX=0,lastY=0, keys={}, inspected=new Set(), nearest=null, elapsed=0, high=true;
+const requestedWorld=new URLSearchParams(location.search).get('world');if(requestedWorld==='mars'||requestedWorld==='moon')env=requestedWorld;
+const player = new THREE.Vector3(0,1.75,8);
+const materials = {};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function terrainHeight(x,z,world=env) {
+  const r=Math.hypot(x,z);
+  const mask=THREE.MathUtils.smoothstep(r,7,34);
+  if(world==='moon'){
+    let h=(Math.sin(x*.055)*Math.cos(z*.052)*.8 + Math.sin(x*.16+z*.08)*.12)*mask;
+    for(const c of [{x:-26,z:-27,r:9,d:1.6},{x:28,z:-25,r:11,d:1.8},{x:-28,z:25,r:9,d:1.5},{x:27,z:26,r:8,d:1.4}]){
+      const d=Math.hypot(x-c.x,z-c.z);
+      if(d<c.r*1.4){const n=d/c.r;if(n<1)h-=c.d*(1-n*n);else h+=c.d*.24*(1-(n-1)/.4);}
+    }
+    return h;
+  }
+  return (Math.sin(x*.06+1)*Math.cos(z*.05)*.9+Math.sin(x*.15)*.2)*mask + Math.max(0,r-50)*.1;
+}
+function makeGround(world) {
+  const geo=new THREE.PlaneGeometry(220,220,180,180); geo.rotateX(-Math.PI/2);
+  const p=geo.attributes.position;
+  for(let i=0;i<p.count;i++)p.setY(i,terrainHeight(p.getX(i),p.getZ(i),world));
+  geo.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({color:world==='moon'?0x77736e:0x9b6045,roughness:1});
+  const mesh=new THREE.Mesh(geo,mat);mesh.receiveShadow=true;mesh.userData.ground=true;return mesh;
+}
+function mat(color,rough=.8,metal=0){return new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal});}
+function addMesh(group,geo,material,pos,rot=null){const m=new THREE.Mesh(geo,material);m.position.set(...pos);if(rot)m.rotation.set(...rot);m.castShadow=true;m.receiveShadow=true;group.add(m);return m;}
+function cylinderBetween(group,a,b,r1,r2,material,segments=10){
+ const A=new THREE.Vector3(...a),B=new THREE.Vector3(...b),d=new THREE.Vector3().subVectors(B,A);
+ const m=new THREE.Mesh(new THREE.CylinderGeometry(r2,r1,d.length(),segments),material);
+ m.position.copy(A).add(B).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());m.castShadow=true;group.add(m);return m;
+}
+function createLander(g){
+ const gold=mat(0xc3a75e,.55,.35),silver=mat(0xb7bfc2,.45,.55),dark=mat(0x343b42),foil=mat(0xb99c64,.8,.15);
+ const body=addMesh(g,new THREE.CylinderGeometry(1.55,1.85,1.65,6),gold,[0,2.5,0],[0,Math.PI/6,0]);
+ addMesh(g,new THREE.CylinderGeometry(.85,1.15,.55,6),silver,[0,3.55,0],[0,Math.PI/6,0]);
+ addMesh(g,new THREE.ConeGeometry(.35,.75,6),dark,[0,4.15,0]);
+ for(let i=0;i<4;i++){const a=i*Math.PI/2+Math.PI/4,x=Math.cos(a),z=Math.sin(a);
+  cylinderBetween(g,[x*.8,1.5,z*.8],[x*3.1,.25,z*3.1],.09,.055,silver);
+  addMesh(g,new THREE.BoxGeometry(.85,.12,.65),dark,[x*3.1,.12,z*3.1]);
+  cylinderBetween(g,[x*1.35,1.2,z*1.35],[x*1.35,.3,z*1.35],.06,.06,dark);
+ }
+ for(let i=0;i<6;i++){const a=i*Math.PI/3;addMesh(g,new THREE.BoxGeometry(.22,.85,.12),foil,[Math.cos(a)*1.75,2.55,Math.sin(a)*1.75],[0,-a,0]);}
+ addMesh(g,new THREE.BoxGeometry(.45,.4,.12),dark,[0,2.45,1.82]);
+}
+function createRover(g){
+ const frame=mat(0xaaa99d,.65,.2),black=mat(0x242a2d),gold=mat(0xb99b57,.65,.3),silver=mat(0xc4c8c8,.35,.6);
+ addMesh(g,new THREE.BoxGeometry(2.7,.22,1.5),frame,[0,1.35,0]);
+ addMesh(g,new THREE.BoxGeometry(1.15,.65,1.1),gold,[0,1.85,-.05]);
+ addMesh(g,new THREE.BoxGeometry(.9,.12,.8),silver,[0,2.22,-.05]);
+ for(const x of [-1.25,1.25])for(const z of [-.75,.75]){
+  const wheel=addMesh(g,new THREE.CylinderGeometry(.52,.52,.22,16),black,[x,.72,z],[0,0,Math.PI/2]);
+  for(let j=0;j<12;j++){const a=j*Math.PI/6;addMesh(g,new THREE.BoxGeometry(.08,.12,.27),silver,[x+Math.sin(a)*.51,.72+Math.cos(a)*.51,z],[0,0,a]);}
+  cylinderBetween(g,[x*.75,1.3,z*.7],[x,.72,z],.07,.05,frame);
+ }
+ cylinderBetween(g,[0,2.1,0],[0,2.9,0],.035,.025,silver);
+ addMesh(g,new THREE.SphereGeometry(.15,10,8),silver,[0,2.92,0]);
+}
+function createALSEP(g){
+ const gold=mat(0xc2a35b,.7,.2),dark=mat(0x30383d),silver=mat(0xbfc7c8,.45,.5);
+ addMesh(g,new THREE.BoxGeometry(1.5,.75,1.15),gold,[0,.65,0]);
+ addMesh(g,new THREE.BoxGeometry(1.2,.08,.9),silver,[0,1.08,0]);
+ for(let x of [-.55,.55])for(let z of [-.4,.4])cylinderBetween(g,[x,.4,z],[x,.05,z],.04,.04,dark);
+ cylinderBetween(g,[0,1.05,0],[0,2.6,0],.035,.025,silver);
+ addMesh(g,new THREE.SphereGeometry(.25,12,8),gold,[0,2.65,0]);
+ addMesh(g,new THREE.BoxGeometry(1.4,.05,.8),dark,[1.15,1.3,0],[0,0,-.15]);
+}
+function createReflector(g){
+ const silver=mat(0xb9d0d5,.25,.8),base=mat(0x4b5357);
+ addMesh(g,new THREE.BoxGeometry(1.2,.18,1.2),base,[0,.2,0]);
+ const box=addMesh(g,new THREE.BoxGeometry(.8,.55,.8),silver,[0,.58,0]);
+ for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++){
+  const s=addMesh(g,new THREE.BoxGeometry(.18,.18,.035),mat(0xefffff,.15,.9),[x*.23,.58,z*.23]);s.rotation.x=-.3;
+ }
+ cylinderBetween(g,[0,.2,0],[0,.03,0],.08,.08,base);
+}
+function createParachute(g){
+ const red=mat(0xc9b4a0,.9),white=mat(0xe4ded1,.9),dark=mat(0x34302d);
+ const canopy=new THREE.Mesh(new THREE.SphereGeometry(3,24,12,0,Math.PI*2,0,Math.PI*.48),red);canopy.position.y=6.5;canopy.scale.y=.8;canopy.castShadow=true;g.add(canopy);
+ for(let i=0;i<12;i++){const a=i*Math.PI/6;const x=Math.cos(a)*2.85,z=Math.sin(a)*2.85;
+  cylinderBetween(g,[x,6.1,z],[0,1.2,0],.018,.018,white,5);}
+ addMesh(g,new THREE.BoxGeometry(.8,.55,.65),dark,[0,.8,0]);
+}
+function createBackshell(g){
+ const shell=mat(0x9d795f,.85),rim=mat(0xd0c4b1,.75);
+ const dome=addMesh(g,new THREE.SphereGeometry(2.1,24,14,0,Math.PI*2,0,Math.PI/2),shell,[0,1.5,0]);
+ dome.scale.y=.65;
+ addMesh(g,new THREE.TorusGeometry(2.05,.12,8,32),rim,[0,1.5,0],[0,0,0]);
+}
+function createHeatshield(g){
+ const shield=mat(0x754c39,.95),edge=mat(0xb28a69,.8);
+ const cone=addMesh(g,new THREE.CylinderGeometry(2.15,1.45,.5,32),shield,[0,.65,0]);
+ addMesh(g,new THREE.TorusGeometry(2.08,.1,8,32),edge,[0,.9,0]);
+}
+function createSkycrane(g){
+ const silver=mat(0xb8b8ae,.6,.3),dark=mat(0x393e40),gold=mat(0xb89b5d);
+ addMesh(g,new THREE.BoxGeometry(2.2,.7,2.2),silver,[0,2.1,0]);
+ for(let i=0;i<4;i++){const a=i*Math.PI/2;const x=Math.cos(a),z=Math.sin(a);
+  cylinderBetween(g,[x*.7,2.1,z*.7],[x*2.0,.25,z*2.0],.08,.045,dark);
+  addMesh(g,new THREE.CylinderGeometry(.18,.18,.5,10),gold,[x*2,.25,z*2]);
+ }
+ for(let x of [-.8,.8])for(let z of [-.8,.8])cylinderBetween(g,[x,1.8,z],[x,.3,z],.035,.025,silver);
+}
+function buildArtifact(item){
+ const group=new THREE.Group();group.position.set(item.position[0],terrainHeight(item.position[0],item.position[2],env),item.position[2]);
+ switch(item.id){case'lm':createLander(group);break;case'rover':createRover(group);break;case'alsep':createALSEP(group);break;case'retro':createReflector(group);break;case'parachute':createParachute(group);break;case'backshell':createBackshell(group);break;case'heatshield':createHeatshield(group);break;case'descent':createSkycrane(group);break;}
+ group.traverse(o=>{if(o.isMesh){o.userData.artifact=item;o.material=o.material.clone();}});
+ group.userData.artifact=item;scene.add(group);return group;
+}
+function clearWorld(){
+ for(const o of objects)scene.remove(o.group);
+ objects=[];
+ if(terrain)scene.remove(terrain);
+}
+function buildWorld(){
+ clearWorld();
+ terrain=makeGround(env);scene.add(terrain);
+ const list=DATA[env];
+ for(const item of list)objects.push({item,group:buildArtifact(item)});
+ $('siteTitle').textContent=env==='moon'?'LUNAR SURFACE':'MARTIAN SURFACE';
+ $('siteSubtitle').textContent=env==='moon'?'MARE TRANQUILLITATIS // RECONSTRUCTED':'JEZERO REGION // ILLUSTRATIVE SHOWCASE';
+ $('gravity').textContent=env==='moon'?'1.62 m/s²':'3.72 m/s²';
+ $('moonBtn').className=env==='moon'?'action':'pill text-slate-300';
+ $('marsBtn').className=env==='mars'?'action amber':'pill text-slate-300';
+ scene.background=new THREE.Color(env==='moon'?0x03050b:0x9a5b3e);
+ scene.fog=new THREE.FogExp2(env==='moon'?0x03050b:0x9a5b3e,env==='moon'?.0024:.009);
+ scene.children.find(o=>o.isHemisphereLight).color.setHex(env==='moon'?0x9daec3:0xe0a17a);
+ scene.children.find(o=>o.isHemisphereLight).groundColor.setHex(env==='moon'?0x1b2230:0x512a20);
+ const sun=scene.children.find(o=>o.isDirectionalLight);sun.color.setHex(env==='moon'?0xffffff:0xffd5b5);sun.intensity=env==='moon'?2.5:2.1;
+ player.set(0,terrainHeight(0,8)+1.75,8);yaw=0;pitch=-.08;
+ updateWaypoints();updateHud();
+}
+function updateWaypoints(){
+ $('waypoints').innerHTML=DATA[env].map(item=>`<button data-id="${item.id}" class="w-full text-left rounded-lg px-2 py-2 bg-white/5 border border-white/10 hover:border-cyan-300/40 flex justify-between gap-2"><span class="text-[10px] text-slate-200 truncate">${item.name}</span><span class="mono text-[9px] cyan">${inspected.has(item.id)?'✓':'GO'}</span></button>`).join('');
+ document.querySelectorAll('#waypoints button').forEach(b=>b.addEventListener('click',()=>focusArtifact(b.dataset.id)));
+}
+function updateHud(){
+ const found=DATA[env].filter(x=>inspected.has(x.id)).length;
+ $('count').textContent=`${found} / ${DATA[env].length}`;$('progress').style.width=(found/DATA[env].length*100)+'%';
+}
+function focusArtifact(id){
+ const obj=objects.find(o=>o.item.id===id);if(!obj)return;
+ const p=obj.group.position;const dx=p.x-player.x,dz=p.z-player.z;const len=Math.hypot(dx,dz)||1;
+ player.set(p.x-dx/len*5,terrainHeight(p.x-dx/len*5,p.z-dz/len*5)+1.75,p.z-dz/len*5);
+ yaw=Math.atan2(-(p.x-player.x),-(p.z-player.z));
+}
+function openDossier(item){
+ if(!item)return;
+ inspected.add(item.id);updateWaypoints();updateHud();
+ $('modalType').textContent=item.type;$('modalYear').textContent=`${item.mission.toUpperCase()} // ${item.year}`;
+ $('modalTitle').textContent=item.name;$('modalPurpose').textContent=item.purpose;$('modalWhy').textContent=item.why;$('modalHistory').textContent=item.history;
+ $('sourceLink').href=item.url;$('modal').classList.remove('hidden');$('modal').classList.add('flex');
+}
+function closeDossier(){$('modal').classList.add('hidden');$('modal').classList.remove('flex');}
+function showToast(msg){$('toast').textContent=msg;$('toast').style.opacity='1';setTimeout(()=>$('toast').style.opacity='0',1800);}
+function init(){
+ scene=new THREE.Scene();scene.background=new THREE.Color(0x03050b);
+ camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,600);
+ camera.position.copy(player);
+ try{renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});}catch(error){$('scene').innerHTML='<div style="position:absolute;inset:20px;display:grid;place-items:center;text-align:center;color:#dbeafe;font:14px system-ui">WebGL is unavailable. Enable browser hardware acceleration or use a WebGL-capable browser to enter the 3D field site.</div>';return;}
+ renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+ $('scene').appendChild(renderer.domElement);
+ clock=new THREE.Clock();raycaster=new THREE.Raycaster();mouse=new THREE.Vector2();
+ scene.add(new THREE.HemisphereLight(0x9daec3,0x1b2230,.55));
+ const sun=new THREE.DirectionalLight(0xffffff,2.5);sun.position.set(-35,55,25);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.camera.left=-45;sun.shadow.camera.right=45;sun.shadow.camera.top=45;sun.shadow.camera.bottom=-45;sun.shadow.bias=-.0004;scene.add(sun);
+ const starsGeo=new THREE.BufferGeometry(),positions=[];
+ for(let i=0;i<2600;i++){const r=220+Math.random()*100,a=Math.random()*Math.PI*2,b=Math.acos(2*Math.random()-1);positions.push(r*Math.sin(b)*Math.cos(a),Math.abs(r*Math.cos(b))+12,r*Math.sin(b)*Math.sin(a));}
+ starsGeo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+ starField=new THREE.Points(starsGeo,new THREE.PointsMaterial({color:0xffffff,size:1.1,sizeAttenuation:true}));scene.add(starField);
+ const dustGeo=new THREE.BufferGeometry(),dustPos=[];
+ for(let i=0;i<380;i++)dustPos.push((Math.random()-.5)*75,Math.random()*8,(Math.random()-.5)*75);
+ dustGeo.setAttribute('position',new THREE.Float32BufferAttribute(dustPos,3));
+ dust=new THREE.Points(dustGeo,new THREE.PointsMaterial({color:0xcbd5e1,size:.075,transparent:true,opacity:.35}));scene.add(dust);
+ buildWorld();bindUI();animate();
+}
+function bindUI(){
+ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+ addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyE'&&nearest)openDossier(nearest);if(e.code==='Escape'){closeDossier();$('helpModal').classList.add('hidden');$('helpModal').classList.remove('flex');}});
+ addEventListener('keyup',e=>keys[e.code]=false);
+ const canvas=renderer.domElement;
+ canvas.addEventListener('pointerdown',e=>{if(!$('pagePanel').classList.contains('hidden')||!$('modal').classList.contains('hidden'))return;dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);});
+ canvas.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;yaw-=dx*.003;pitch=clamp(pitch-dy*.0025,-1.2,1.2);});
+ canvas.addEventListener('pointerup',e=>{if(!dragging)return;dragging=false;const n=new THREE.Vector2(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);raycaster.setFromCamera(n,camera);const hits=raycaster.intersectObjects(objects.flatMap(o=>o.group.children),true);let hit=hits.find(h=>h.object.userData.artifact);if(hit)openDossier(hit.object.userData.artifact);});
+ $('touchControls').classList.remove('hidden');
+ $('moonBtn').onclick=()=>{if(env!=='moon'){env='moon';buildWorld();}};
+ $('marsBtn').onclick=()=>{if(env!=='mars'){env='mars';buildWorld();}};
+ $('closeModal').onclick=closeDossier;
+ $('helpBtn').onclick=()=>{$('helpModal').classList.remove('hidden');$('helpModal').classList.add('flex');};
+ $('closeHelp').onclick=()=>{$('helpModal').classList.add('hidden');$('helpModal').classList.remove('flex');};
+ $('qualityBtn').onclick=()=>{high=!high;renderer.setPixelRatio(high?Math.min(devicePixelRatio,1.7):1);renderer.shadowMap.enabled=high;dust.visible=high;$('qualityBtn').textContent=high?'GRAPHICS: HIGH':'GRAPHICS: LITE';};
+ document.querySelectorAll('.touch-key').forEach(btn=>{const code=btn.dataset.key;const down=e=>{e.preventDefault();keys[code]=true;};const up=e=>{e.preventDefault();keys[code]=false;};btn.addEventListener('pointerdown',down);['pointerup','pointercancel','pointerleave'].forEach(t=>btn.addEventListener(t,up));});
+ $('touchInspect').addEventListener('click',()=>{if(nearest)openDossier(nearest);});
+ document.querySelectorAll('.navbtn[data-page]').forEach(btn=>btn.onclick=()=>{
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  const page=btn.dataset.page,explore=page==='explore';$('exploreHud').classList.toggle('hidden',!explore);$('pagePanel').classList.toggle('hidden',explore);
+  $('archivePage').classList.toggle('hidden',page!=='archive');$('aboutPage').classList.toggle('hidden',page!=='about');
+  if(explore)showToast('Returning to surface exploration');
+  else {camera.position.set(0,32,48);camera.lookAt(0,0,0);}
+ });
+ renderArchive();
+}
+function renderArchive(){
+ $('archiveCards').innerHTML=[...DATA.moon,...DATA.mars].map(item=>`<article class="glass rounded-2xl p-4"><div class="mono text-[9px] cyan">${item.mission} // ${item.year}</div><h3 class="font-bold mt-2">${item.name}</h3><p class="text-xs text-slate-400 mt-2 leading-5">${item.purpose}</p><button data-env="${item.id==='parachute'||item.id==='backshell'||item.id==='heatshield'||item.id==='descent'?'mars':'moon'}" class="action mt-4">VISIT SITE ↗</button></article>`).join('');
+ document.querySelectorAll('#archiveCards button').forEach(b=>b.onclick=()=>{env=b.dataset.env;buildWorld();document.querySelector('[data-page="explore"]').click();});
+}
+function animate(){
+ requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05);elapsed+=dt;
+ if($('exploreHud').classList.contains('hidden')){
+  const t=elapsed*.12;camera.position.set(Math.sin(t)*42,24,Math.cos(t)*42);camera.lookAt(0,0,0);
+ } else {
+  let f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0);
+  let s=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+  const length=Math.hypot(f,s)||1;f/=length;s/=length;
+  const speed=(keys.ShiftLeft?9:5.2)*dt,sy=Math.sin(yaw),cy=Math.cos(yaw);
+  const nextX=clamp(player.x+(-sy*f+cy*s)*speed,-85,85);
+  const nextZ=clamp(player.z+(-cy*f-sy*s)*speed,-85,85);
+  const blocked=objects.some(o=>Math.hypot(nextX-o.group.position.x,nextZ-o.group.position.z)<3.0);
+  if(!blocked){player.x=nextX;player.z=nextZ;}
+  const moving=Math.abs(f)+Math.abs(s)>.01;
+  player.y=terrainHeight(player.x,player.z)+1.72+(moving?Math.sin(elapsed*10)*.045:0);
+  camera.position.copy(player);camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;
+  let best=Infinity;nearest=null;
+  for(const o of objects){const d=player.distanceTo(o.group.position);if(d<best){best=d;nearest=o.item;}
+   o.group.traverse(c=>{if(c.isMesh&&c.material.emissive){c.material.emissive.setHex(d<8?0x00333a:0x000000);c.material.emissiveIntensity=d<8?.6:0;}});
+  }
+  $('prompt').style.opacity=best<8?'1':'0';if(nearest&&best<8)$('promptName').textContent=`${nearest.name} · ${best.toFixed(1)} m`;
+  const deg=(Math.round((-yaw*180/Math.PI)%360)+360)%360;const dirs=['N','NE','E','SE','S','SW','W','NW'];
+  $('heading').textContent=`${String(deg).padStart(3,'0')}° ${dirs[Math.round(deg/45)%8]}`;
+  $('coords').textContent=`X ${player.x.toFixed(0)} / Z ${player.z.toFixed(0)}`;
+  const secs=Math.floor(elapsed);$('met').textContent=`${String(Math.floor(secs/3600)).padStart(2,'0')}:${String(Math.floor(secs/60)%60).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`;
+  dust.rotation.y+=dt*.012;
+ }
+ renderer.render(scene,camera);
+}
+init();
+</script>
+</body>
+</html>
